@@ -18,57 +18,64 @@ app.post(process.env.ENDPOINT_NAME, async (req, res) => {
   const tokenCi360 = `Bearer ${process.env.TOKENCI}`;
   const ulrCi360 = process.env.URLCI;
 
-  let resposta = req.body[0];
+  const dataArray = req.body;
 
-  let status = resposta.eyou.statusDesc;
-  console.log("Retorno recebido");
-  console.log(JSON.stringify(resposta, null, 2));
+  function createCi360RequestBody(resposta) {
+    const status = resposta.eyou.statusDesc;
+    const statusCode = resposta.eyou.status;
+    if (statusCode == "2" || statusCode == "6") {
+      return {
+        eventName: status,
+        datahub_id: resposta.attributes.datahub_id,
+        task_id: resposta.attributes.task_id,
+        destination: resposta.destination,
+        costCenter: resposta.costCenter,
+        campainId: resposta.campainId,
+        moText: resposta.eyou.moText,
+      };
+    }
+    return null;
+  }
 
-  async function PostEventCI360() {
-    console.log("Iniciando e Envio do Evento");
+  async function sendRequests() {
+    const batchSize = 100;
+    for (let i = 0; i < dataArray.length; i += batchSize) {
+      const batch = dataArray.slice(i, i + batchSize);
 
-    const bodyCi360 = {
-      eventName: status,
-      datahub_id: resposta.attributes.datahub_id,
-      task_id: resposta.attributes.task_id,
-      destination: resposta.destination,
-      campainId: resposta.campainId,
-    };
-    console.log("Body Alterado");
-    console.log(bodyCi360);
+      const requests = batch.map(async (resposta) => {
+        const bodyCi360 = createCi360RequestBody(resposta);
+        if (bodyCi360) {
+          const status = resposta.eyou.statusDesc; // Armazena o status aqui
+          console.log("Retorno recebido");
+          console.log(JSON.stringify(resposta, null, 2));
+          console.log("Body Alterado");
+          console.log(bodyCi360);
 
-    const headers = {
-      Authorization: tokenCi360,
-      "Content-Type": "application/json",
-    };
+          const headers = {
+            Authorization: tokenCi360,
+            "Content-Type": "application/json",
+          };
+          try {
+            const response = await axios.post(ulrCi360, bodyCi360, {
+              headers: headers,
+            });
 
-    try {
-      const response = await axios.post(ulrCi360, bodyCi360, {
-        headers: headers,
+            if (response.status === 200 || response.status === 201) {
+              console.log("Evento enviado com sucesso!");
+            }
+          } catch (error) {
+            console.error("Erro na solicitação:", error.message);
+          }
+        } else {
+          console.log(`Retornos descartados ${resposta.eyou.statusDesc}`);
+        }
       });
 
-      if (response.status === 200 || response.status === 201) {
-        console.log("Mensagem enviada com sucesso!");
-        res.send(
-          `Status do envio: ${response.status}-${JSON.stringify(
-            response.data,
-            null,
-            2
-          )}`
-        );
-      }
-    } catch (error) {
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.userMessage
-      ) {
-        const errorMessage = error.response.data.userMessage;
-        res.status(400).send(`Erro na solicitação: ${errorMessage}`);
-      } else {
-        res.status(400).send("Erro na solicitação");
-      }
+      await Promise.all(requests);
     }
   }
-  PostEventCI360();
+
+  sendRequests();
+
+  res.status(200).send({ success: "Eventos enviados com sucesso!" });
 });
