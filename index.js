@@ -23,7 +23,7 @@ app.post(process.env.ENDPOINT_NAME, async (req, res) => {
   function createCi360RequestBody(resposta) {
     const status = resposta.eyou.statusDesc;
     const statusCode = resposta.eyou.status;
-    if (statusCode == "2" || statusCode == "6") {
+    if (statusCode == "2" || statusCode == "6" || statusCode == "3") {
       return {
         eventName: status,
         datahub_id: resposta.attributes.datahub_id,
